@@ -53,6 +53,7 @@ class BatchRegistry:
         if batchSystem == "auto": batchSystem = BatchRegistry.getBatchSystem(BatchRegistry.getDomain())        
         if batchSystem == "lsf" : return LsfMonitor
         elif batchSystem == "sge": return SGEMonitor
+        elif batchSystem == "iclust": return IclustMonitor
         else:
             raise Exception,"Unrecognized batchSystem: %s" % batchSystem
 
@@ -636,6 +637,19 @@ class SGEJob(LsfJob):
 
         if self.async:
             result = commands.getstatusoutput("qstat")
+            checkcount = 0
+            while len(result[1].split("\n")) < 3:
+                print "SGE REBOOT MITIGATION: qstat result seems too short"
+                print "---------------------------------------------------"
+                print result[1]
+                print "---------------------------------------------------"
+                print "... so we wait before trying again"
+                sleep(5.)
+                result = commands.getstatusoutput("qstat")
+                checkcount += 1
+                if checkcount > 12:
+                    break
+                
 #                print "We are in handleOutput and we have the following output:",result
             self.exitStatus = 0 # assume it is done unless listed
             for line in result[1].split("\n"):
@@ -728,13 +742,24 @@ class IclustJob(LsfJob):
         #if self.async:
         #    return self.exitStatus, (out,(self.jobName,self.jobid))
 
-        #return self.handleOutput()
-        return
+        return self.handleOutput()
 
     def handleOutput(self):
 
         if self.async:
             result = commands.getstatusoutput("qstat")
+            checkcount = 0
+            while len(result[1].split("\n")) < 3:
+                print "SGE REBOOT MITIGATION: qstat result seems too short"
+                print "---------------------------------------------------"
+                print result[1]
+                print "---------------------------------------------------"
+                print "... so we wait before trying again"
+                sleep(5.)
+                result = commands.getstatusoutput("qstat")
+                checkcount += 1
+                if checkcount > 12:
+                    break
 #                print "We are in handleOutput and we have the following output:",result
             self.exitStatus = 0 # assume it is done unless listed
             for line in result[1].split("\n"):
@@ -784,12 +809,44 @@ class SGEMonitor(LsfMonitor):
 
     def monitor(self):
         status = commands.getstatusoutput("qstat")
+        checkcount = 0
+        while len(status[1].split("\n")) < 3:
+            print "SGE REBOOT MITIGATION: qstat result seems too short"
+            print "---------------------------------------------------"
+            print status[1]
+            print "---------------------------------------------------"
+            print "... so we wait before trying again"
+            sleep(5.)
+            status = commands.getstatusoutput("qstat")
+            checkcount += 1
+            if checkcount > 12:
+                break
         jobids = []
         statuses = []
         for line in status[1].split("\n")[2:]:
             toks = line.split()
             jobids.append(toks[0])
             statuses.append(toks[2])
+            #                print "DEBUG jobid jobids",jobid,jobids[0]
+            #                print type(jobid),type(jobids[0])
+            #                print
+            #                print jobs
+        for jobid in self.jobsmap.keys():
+            if not jobids.count(jobid):
+                # i.e. job is no longer on the list, and hence done
+                self.jobFinished(jobid,None)
+                    
+# -----------------------------------------------------------------------------------------------------
+class IclustMonitor(LsfMonitor):
+
+    def monitor(self):
+        status = commands.getstatusoutput("qstat")
+        jobids = []
+        statuses = []
+        for line in status[1].split("\n")[2:]:
+            toks = line.split()
+            jobids.append(toks[0])
+            statuses.append(toks[4])
             #                print "DEBUG jobid jobids",jobid,jobids[0]
             #                print type(jobid),type(jobids[0])
             #                print
